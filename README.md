@@ -83,7 +83,7 @@ To use this server addon, you'll need the following dependencies installed:
     "MinimumPlayers": 4,
     "MissionAmountNormal": 1,
     "MissionAmountVip": 3,
-    "VipFlags": ["@css/vip"],
+    "VipFlags": ["any.vip.flag"],
     "EventDebugLogs": false,
     "AllowProgressDuringWarmup": false,
     "ResetMode": "Daily",
@@ -100,7 +100,7 @@ To use this server addon, you'll need the following dependencies installed:
     "Event": "EventPlayerDeath",
     "Target": "Attacker",
     "Amount": 10,
-    "RewardCommands": ["css_givecredits {steamid64} 30"],
+    "RewardCommands": ["sw_givecredits {steamid64} 30"],
     "RewardPhrase": "30 Credits",
     "Phrase": "Kill 10 players"
   },
@@ -112,7 +112,7 @@ To use this server addon, you'll need the following dependencies installed:
     },
     "Target": "Attacker",
     "Amount": 5,
-    "RewardCommands": ["css_givecredits {steamid64} 50"],
+    "RewardCommands": ["sw_givecredits {steamid64} 50"],
     "RewardPhrase": "50 Credits",
     "Phrase": "Get 5 AK47 headshot kills"
   },
@@ -120,7 +120,7 @@ To use this server addon, you'll need the following dependencies installed:
     "Event": "EventRoundMvp",
     "Target": "Userid",
     "Amount": 3,
-    "RewardCommands": ["css_givecredits {steamid64} 50"],
+    "RewardCommands": ["sw_givecredits {steamid64} 50"],
     "RewardPhrase": "50 Credits",
     "Phrase": "Get 3 MVP awards"
   },
@@ -128,7 +128,7 @@ To use this server addon, you'll need the following dependencies installed:
     "Event": "EventRoundEnd",
     "Target": "winner",
     "Amount": 5,
-    "RewardCommands": ["css_givecredits {steamid64} 25"],
+    "RewardCommands": ["sw_givecredits {steamid64} 25"],
     "RewardPhrase": "25 Credits",
     "Phrase": "Win 5 rounds"
   },
@@ -136,7 +136,7 @@ To use this server addon, you'll need the following dependencies installed:
     "Event": "PlayTime",
     "Target": "Userid",
     "Amount": 30,
-    "RewardCommands": ["css_givecredits {steamid64} 60"],
+    "RewardCommands": ["sw_givecredits {steamid64} 60"],
     "RewardPhrase": "60 Credits",
     "Phrase": "Play 30 minutes on the server"
   }
@@ -145,36 +145,36 @@ To use this server addon, you'll need the following dependencies installed:
 
 ### Available Events
 
-| Event | Target | Description |
-|-------|--------|-------------|
-| `EventPlayerDeath` | `Attacker`, `Assister` | Player kills/assists |
-| `EventRoundMvp` | `Userid` | MVP awards |
-| `EventBombPlanted` | `Userid` | Bomb plants |
-| `EventBombDefused` | `Userid` | Bomb defuses |
-| `EventHostageRescued` | `Userid` | Hostage rescues |
-| `EventGrenadeThrown` | `Userid` | Grenade throws |
-| `EventRoundEnd` | `winner`, `loser` | Round wins/losses |
-| `PlayTime` | `Userid` | Minutes played |
+| Event                 | Target                 | Description          |
+| --------------------- | ---------------------- | -------------------- |
+| `EventPlayerDeath`    | `Attacker`, `Assister` | Player kills/assists |
+| `EventRoundMvp`       | `Userid`               | MVP awards           |
+| `EventBombPlanted`    | `Userid`               | Bomb plants          |
+| `EventBombDefused`    | `Userid`               | Bomb defuses         |
+| `EventHostageRescued` | `Userid`               | Hostage rescues      |
+| `EventGrenadeThrown`  | `Userid`               | Grenade throws       |
+| `EventRoundEnd`       | `winner`, `loser`      | Round wins/losses    |
+| `PlayTime`            | `Userid`               | Minutes played       |
 
 ### Reset Modes
 
-| Mode | Description |
-|------|-------------|
-| `Daily` | Missions reset at midnight |
-| `Weekly` | Missions reset every Sunday |
-| `Monthly` | Missions reset at end of month |
-| `PerMap` | Missions reset on map change |
+| Mode      | Description                                 |
+| --------- | ------------------------------------------- |
+| `Daily`   | Missions reset at midnight                  |
+| `Weekly`  | Missions reset every Sunday                 |
+| `Monthly` | Missions reset at end of month              |
+| `PerMap`  | Missions reset on map change                |
 | `Instant` | Completed missions are immediately replaced |
 
 ### Reward Placeholders
 
-| Placeholder | Description |
-|-------------|-------------|
+| Placeholder   | Description          |
+| ------------- | -------------------- |
 | `{steamid64}` | Player's Steam ID 64 |
-| `{steamid}` | Same as steamid64 |
-| `{name}` | Player's name |
-| `{userid}` | Player's user ID |
-| `{slot}` | Player's slot |
+| `{steamid}`   | Same as steamid64    |
+| `{name}`      | Player's name        |
+| `{userid}`    | Player's user ID     |
+| `{slot}`      | Player's slot        |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
