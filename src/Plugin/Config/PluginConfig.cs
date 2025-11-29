@@ -8,7 +8,7 @@ public sealed class PluginConfig
 	public string DatabaseConnection { get; set; } = "host";
 
 	/// <summary>
-	/// Commands to check missions (without css_ prefix)
+	/// Commands to check missions (without prefix)
 	/// </summary>
 	public List<string> MissionCommands { get; set; } = ["mission", "missions"];
 
@@ -35,7 +35,7 @@ public sealed class PluginConfig
 	/// <summary>
 	/// Flags that grant VIP status (any one of these)
 	/// </summary>
-	public List<string> VipFlags { get; set; } = ["@css/vip"];
+	public List<string> VipFlags { get; set; } = ["vipcore.access"];
 
 	/// <summary>
 	/// Enable debug logging for events, you can create missions by this values
