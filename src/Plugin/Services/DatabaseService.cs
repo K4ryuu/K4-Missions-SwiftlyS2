@@ -1,4 +1,5 @@
-using Dapper;
+using Dommel;
+using K4Missions.Database.Migrations;
 using Microsoft.Extensions.Logging;
 
 namespace K4Missions;
@@ -6,44 +7,30 @@ namespace K4Missions;
 public sealed partial class Plugin
 {
 	/// <summary>
-	/// Handles mission persistence in MySQL database
+	/// Handles mission persistence in database (MySQL, PostgreSQL, SQLite)
 	/// </summary>
 	public sealed class DatabaseService(string connectionName)
 	{
 		private readonly string _connectionName = connectionName;
 
+		internal const string TableName = "k4_missions";
+
 		/// <summary>True if database is configured and ready</summary>
 		public bool IsEnabled { get; private set; }
 
 		/// <summary>
-		/// Initialize database tables
+		/// Initialize database tables using FluentMigrator
 		/// </summary>
 		public async Task InitializeAsync()
 		{
 			try
 			{
-				const string sql = """
-					CREATE TABLE IF NOT EXISTS `k4_missions` (
-						`id` INT AUTO_INCREMENT PRIMARY KEY,
-						`steamid64` BIGINT UNSIGNED NOT NULL,
-						`event` VARCHAR(64) NOT NULL,
-						`target` VARCHAR(64) NOT NULL,
-						`amount` INT NOT NULL,
-						`phrase` VARCHAR(255) NOT NULL,
-						`reward_phrase` VARCHAR(255) NOT NULL,
-						`reward_commands` TEXT NOT NULL,
-						`progress` INT NOT NULL DEFAULT 0,
-						`completed` BOOLEAN NOT NULL DEFAULT FALSE,
-						`expires_at` DATETIME NULL,
-						INDEX `idx_steamid` (`steamid64`),
-						INDEX `idx_expires_at` (`expires_at`)
-					) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-					""";
-
+				// Run FluentMigrator migrations
 				using var connection = Core.Database.GetConnection(_connectionName);
-				await connection.ExecuteAsync(sql);
+				MigrationRunner.RunMigrations(connection);
 
 				IsEnabled = true;
+				Core.Logger.LogInformation("Database initialized with migrations. Table: {Table}", TableName);
 			}
 			catch (Exception ex)
 			{
@@ -62,16 +49,10 @@ public sealed partial class Plugin
 
 			try
 			{
-				const string sql = """
-					SELECT `id` AS Id, `event` AS Event, `target` AS Target, `amount` AS Amount,
-						   `phrase` AS Phrase, `reward_phrase` AS RewardPhrase, `reward_commands` AS RewardCommands,
-						   `progress` AS Progress, `completed` AS Completed, `expires_at` AS ExpiresAt
-					FROM `k4_missions`
-					WHERE `steamid64` = @SteamId;
-					""";
-
 				using var connection = Core.Database.GetConnection(_connectionName);
-				var results = await connection.QueryAsync<DbMission>(sql, new { SteamId = steamId });
+				connection.Open();
+
+				var results = await connection.SelectAsync<DbMission>(m => m.SteamId64 == (long)steamId);
 				return results.ToList();
 			}
 			catch (Exception ex)
@@ -91,24 +72,13 @@ public sealed partial class Plugin
 
 			try
 			{
-				const string sql = """
-					INSERT INTO `k4_missions` (`steamid64`, `event`, `target`, `amount`, `phrase`, `reward_phrase`, `reward_commands`, `progress`, `completed`, `expires_at`)
-					VALUES (@SteamId, @Event, @Target, @Amount, @Phrase, @RewardPhrase, @RewardCommands, 0, FALSE, @ExpiresAt);
-					SELECT LAST_INSERT_ID();
-					""";
+				var dbMission = DbMission.FromPlayerMission(steamId, mission, expiresAt);
 
 				using var connection = Core.Database.GetConnection(_connectionName);
-				return await connection.ExecuteScalarAsync<int>(sql, new
-				{
-					SteamId = steamId,
-					mission.Event,
-					mission.Target,
-					mission.Amount,
-					mission.Phrase,
-					mission.RewardPhrase,
-					RewardCommands = string.Join("|", mission.RewardCommands),
-					ExpiresAt = expiresAt
-				});
+				connection.Open();
+
+				var id = await connection.InsertAsync(dbMission);
+				return Convert.ToInt32(id);
 			}
 			catch (Exception ex)
 			{
@@ -131,19 +101,19 @@ public sealed partial class Plugin
 
 			try
 			{
-				const string sql = """
-					UPDATE `k4_missions`
-					SET `progress` = @Progress, `completed` = @Completed
-					WHERE `id` = @Id;
-					""";
-
 				using var connection = Core.Database.GetConnection(_connectionName);
-				await connection.ExecuteAsync(sql, missionList.Select(m => new
+				connection.Open();
+
+				foreach (var mission in missionList)
 				{
-					m.Id,
-					m.Progress,
-					Completed = m.IsCompleted
-				}));
+					var dbMission = await connection.GetAsync<DbMission>(mission.Id);
+					if (dbMission != null)
+					{
+						dbMission.Progress = mission.Progress;
+						dbMission.Completed = mission.IsCompleted;
+						await connection.UpdateAsync(dbMission);
+					}
+				}
 			}
 			catch (Exception ex)
 			{
@@ -165,10 +135,10 @@ public sealed partial class Plugin
 
 			try
 			{
-				const string sql = "DELETE FROM `k4_missions` WHERE `id` IN @Ids;";
-
 				using var connection = Core.Database.GetConnection(_connectionName);
-				await connection.ExecuteAsync(sql, new { Ids = ids });
+				connection.Open();
+
+				await connection.DeleteMultipleAsync<DbMission>(m => ids.Contains(m.Id));
 			}
 			catch (Exception ex)
 			{
@@ -186,15 +156,16 @@ public sealed partial class Plugin
 
 			try
 			{
-				const string sql = """
-					UPDATE `k4_missions`
-					SET `completed` = TRUE
-					WHERE `id` = @Id AND `completed` = FALSE;
-					""";
-
 				using var connection = Core.Database.GetConnection(_connectionName);
-				var affected = await connection.ExecuteAsync(sql, new { Id = missionId });
-				return affected > 0;
+				connection.Open();
+
+				var dbMission = await connection.GetAsync<DbMission>(missionId);
+				if (dbMission == null || dbMission.Completed)
+					return false;
+
+				dbMission.Completed = true;
+				await connection.UpdateAsync(dbMission);
+				return true;
 			}
 			catch (Exception ex)
 			{
@@ -213,15 +184,11 @@ public sealed partial class Plugin
 
 			try
 			{
-				const string sql = """
-					SELECT DISTINCT `steamid64`
-					FROM `k4_missions`
-					WHERE `expires_at` IS NOT NULL AND `expires_at` < NOW();
-					""";
-
 				using var connection = Core.Database.GetConnection(_connectionName);
-				var results = await connection.QueryAsync<ulong>(sql);
-				return results.ToList();
+				connection.Open();
+
+				var expiredMissions = await connection.SelectAsync<DbMission>(m => m.ExpiresAt != null && m.ExpiresAt < DateTime.UtcNow);
+				return expiredMissions.Select(m => (ulong)m.SteamId64).Distinct().ToList();
 			}
 			catch (Exception ex)
 			{
@@ -240,34 +207,15 @@ public sealed partial class Plugin
 
 			try
 			{
-				const string sql = "DELETE FROM `k4_missions` WHERE `expires_at` IS NOT NULL AND `expires_at` < NOW();";
-
 				using var connection = Core.Database.GetConnection(_connectionName);
-				await connection.ExecuteAsync(sql);
+				connection.Open();
+
+				await connection.DeleteMultipleAsync<DbMission>(m => m.ExpiresAt != null && m.ExpiresAt < DateTime.UtcNow);
 			}
 			catch (Exception ex)
 			{
 				Core.Logger.LogError(ex, "Failed to cleanup expired missions");
 			}
 		}
-	}
-
-	/// <summary>
-	/// Database mission record
-	/// </summary>
-	public sealed class DbMission
-	{
-		public int Id { get; set; }
-		public string Event { get; set; } = string.Empty;
-		public string Target { get; set; } = string.Empty;
-		public int Amount { get; set; }
-		public string Phrase { get; set; } = string.Empty;
-		public string RewardPhrase { get; set; } = string.Empty;
-		public string RewardCommands { get; set; } = string.Empty;
-		public int Progress { get; set; }
-		public bool Completed { get; set; }
-		public DateTime? ExpiresAt { get; set; }
-
-		public List<string> GetRewardCommandsList() => RewardCommands.Split('|', StringSplitOptions.RemoveEmptyEntries).ToList();
 	}
 }
