@@ -7,9 +7,8 @@ public sealed partial class Plugin
 	/// <summary>
 	/// Handles mission expiration and reset logic
 	/// </summary>
-	public sealed class ResetService(PluginConfig config, DatabaseService database, PlayerManager playerManager, WebhookService? webhookService = null)
+	public sealed class ResetService(DatabaseService database, PlayerManager playerManager, WebhookService? webhookService = null)
 	{
-		private readonly PluginConfig _config = config;
 		private readonly DatabaseService _database = database;
 		private readonly PlayerManager _playerManager = playerManager;
 		private readonly WebhookService? _webhookService = webhookService;
@@ -21,7 +20,7 @@ public sealed partial class Plugin
 		/// </summary>
 		public void StartExpirationTimer()
 		{
-			if (_config.ResetMode is ResetMode.Instant or ResetMode.PerMap)
+			if (Config.CurrentValue.ResetMode is ResetMode.Instant or ResetMode.PerMap)
 				return;
 
 			_expirationCheckCts = Core.Scheduler.RepeatBySeconds(60f, async () =>
@@ -44,7 +43,7 @@ public sealed partial class Plugin
 		/// </summary>
 		public DateTime? CalculateExpirationDate()
 		{
-			return _config.ResetMode switch
+			return Config.CurrentValue.ResetMode switch
 			{
 				ResetMode.Daily => DateTime.Now.Date.AddDays(1).AddSeconds(-1), // End of today 23:59:59
 
@@ -114,11 +113,11 @@ public sealed partial class Plugin
 		/// </summary>
 		private async Task SendResetWebhookAsync()
 		{
-			if (_webhookService == null || string.IsNullOrEmpty(_config.WebhookUrl))
+			if (_webhookService == null || string.IsNullOrEmpty(Config.CurrentValue.WebhookUrl))
 				return;
 
 			var nextReset = CalculateExpirationDate() ?? DateTime.Now.AddDays(1);
-			await _webhookService.SendResetAsync(_config.WebhookUrl, _config.ResetMode, nextReset);
+			await _webhookService.SendResetAsync(Config.CurrentValue.WebhookUrl, Config.CurrentValue.ResetMode, nextReset);
 		}
 
 		/// <summary>
@@ -126,7 +125,7 @@ public sealed partial class Plugin
 		/// </summary>
 		public void OnMissionCompleted(MissionPlayer player, PlayerMission mission)
 		{
-			if (_config.ResetMode != ResetMode.Instant)
+			if (Config.CurrentValue.ResetMode != ResetMode.Instant)
 				return;
 
 			// For instant mode, remove completed mission and assign a new one

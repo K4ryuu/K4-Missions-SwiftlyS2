@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.0.5]
+
+### Changed
+
+- **Config hot-reload support**: Refactored configuration handling to use `IOptionsMonitor<PluginConfig>` instead of `IOptions<PluginConfig>`, enabling runtime configuration changes without server restart
+- **Standardized config access**: All configuration access now uses `Config.CurrentValue` pattern for consistency with K4-WeaponPurchase plugin architecture
+- **Simplified service constructors**: Removed config injection from `PlayerManager` and `ResetService` constructors, now using static `Config.CurrentValue` access
+- **GameRules access pattern**: Verified and maintained consistent `Core.EntitySystem.GetGameRules()` pattern for warmup period detection, matching K4-WeaponPurchase architecture
+
+### Technical Details
+
+- Plugin now uses hot-reloadable configuration pattern matching K4-WeaponPurchase plugin
+- Configuration changes can be detected and applied at runtime
+- Improved code maintainability with centralized config access
+- GameRules access uses standardized `Core.EntitySystem.GetGameRules()?.WarmupPeriod` pattern
+
 ## [v1.0.4]
 
 ### Added

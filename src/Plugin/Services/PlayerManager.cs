@@ -9,10 +9,9 @@ public sealed partial class Plugin
 	/// <summary>
 	/// Manages player mission data and progress tracking
 	/// </summary>
-	public sealed class PlayerManager(PluginConfig config, DatabaseService database, MissionLoader missionLoader, Func<DateTime?> calculateExpiration, Func<MissionPlayer, bool> checkVipStatus)
+	public sealed class PlayerManager(DatabaseService database, MissionLoader missionLoader, Func<DateTime?> calculateExpiration, Func<MissionPlayer, bool> checkVipStatus)
 	{
 		private readonly ConcurrentDictionary<ulong, MissionPlayer> _players = new();
-		private readonly PluginConfig _config = config;
 		private readonly DatabaseService _database = database;
 		private readonly MissionLoader _missionLoader = missionLoader;
 		private readonly Func<DateTime?> _calculateExpiration = calculateExpiration;
@@ -148,7 +147,7 @@ public sealed partial class Plugin
 			if (!player.IsLoaded)
 				return;
 
-			var requiredCount = player.IsVip ? _config.MissionAmountVip : _config.MissionAmountNormal;
+			var requiredCount = player.IsVip ? Config.CurrentValue.MissionAmountVip : Config.CurrentValue.MissionAmountNormal;
 			var currentCount = player.Missions.Count;
 
 			if (currentCount > requiredCount)
@@ -239,7 +238,7 @@ public sealed partial class Plugin
 			if (!player.IsValid)
 				return;
 
-			var command = _config.MissionCommands.FirstOrDefault() ?? "missions";
+			var command = Config.CurrentValue.MissionCommands.FirstOrDefault() ?? "missions";
 			var localizer = Core.Translation.GetPlayerLocalizer(player.Player);
 			player.Player.SendChat($"{localizer["k4.general.prefix"]} {localizer["k4.missions.new_mission", count, command]}");
 		}
@@ -250,7 +249,7 @@ public sealed partial class Plugin
 		public void ProcessEvent(string eventType, string target, IPlayer player, Dictionary<string, object?>? eventProperties = null)
 		{
 			// Check minimum player requirement
-			if (ActivePlayerCount < _config.MinimumPlayers)
+			if (ActivePlayerCount < Config.CurrentValue.MinimumPlayers)
 				return;
 
 			var missionPlayer = GetPlayer(player);
@@ -331,7 +330,7 @@ public sealed partial class Plugin
 		/// </summary>
 		public void ProcessPlayTime()
 		{
-			if (ActivePlayerCount < _config.MinimumPlayers)
+			if (ActivePlayerCount < Config.CurrentValue.MinimumPlayers)
 				return;
 
 			foreach (var player in _players.Values.Where(p => p.IsValid && p.IsLoaded))

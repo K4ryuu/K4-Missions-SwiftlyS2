@@ -17,13 +17,13 @@ using SwiftlyS2.Shared.Translation;
 
 namespace K4Missions;
 
-[PluginMetadata(Id = "k4.missions", Version = "1.0.4", Name = "K4 - Missions", Author = "K4ryuu", Description = "A dynamic mission system for Counter-Strike 2 using SwiftlyS2 framework.")]
+[PluginMetadata(Id = "k4.missions", Version = "1.0.5", Name = "K4 - Missions", Author = "K4ryuu", Description = "A dynamic mission system for Counter-Strike 2 using SwiftlyS2 framework.")]
 public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 {
 	/// <summary>Static Core reference for nested classes</summary>
 	public static new ISwiftlyCore Core { get; private set; } = null!;
 
-	private PluginConfig _config = null!;
+	public static IOptionsMonitor<PluginConfig> Config { get; private set; } = null!;
 	private DatabaseService _database = null!;
 	private MissionLoader _missionLoader = null!;
 	private PlayerManager _playerManager = null!;
@@ -62,49 +62,51 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 		_playerManager.Clear();
 	}
 
-	private void LoadConfiguration()
+	private static void LoadConfiguration()
 	{
 		const string ConfigFileName = "config.json";
 		const string ConfigSection = "K4Missions";
 
 		Core.Configuration
 			.InitializeJsonWithModel<PluginConfig>(ConfigFileName, ConfigSection)
-			.Configure(cfg => cfg.AddJsonFile(Core.Configuration.GetConfigPath(ConfigFileName), optional: false, reloadOnChange: true));
+			.Configure(builder =>
+			{
+				builder.AddJsonFile(ConfigFileName, optional: false, reloadOnChange: true);
+			});
 
 		ServiceCollection services = new();
 		services.AddSwiftly(Core)
-			.AddOptionsWithValidateOnStart<PluginConfig>()
-			.BindConfiguration(ConfigSection);
+			.AddOptions<PluginConfig>()
+			.BindConfiguration(ConfigFileName);
 
 		var provider = services.BuildServiceProvider();
-		_config = provider.GetRequiredService<IOptions<PluginConfig>>().Value;
+		Config = provider.GetRequiredService<IOptionsMonitor<PluginConfig>>();
 
-		if (_config.MissionAmountNormal > _config.MissionAmountVip)
+		if (Config.CurrentValue.MissionAmountNormal > Config.CurrentValue.MissionAmountVip)
 		{
 			Core.Logger.LogWarning("Normal mission amount ({Normal}) is higher than VIP amount ({VIP}). This may cause issues.",
-				_config.MissionAmountNormal, _config.MissionAmountVip);
+				Config.CurrentValue.MissionAmountNormal, Config.CurrentValue.MissionAmountVip);
 		}
 	}
 
 	private void InitializeServices()
 	{
-		_database = new DatabaseService(_config.DatabaseConnection);
+		_database = new DatabaseService(Config.CurrentValue.DatabaseConnection);
 		_missionLoader = new MissionLoader();
 		_missionLoader.LoadFromFile(Core.PluginPath);
 
 		_playerManager = new PlayerManager(
-			_config,
 			_database,
 			_missionLoader,
 			() => _resetService?.CalculateExpirationDate(),
 			CheckVipStatus);
 
-		if (!string.IsNullOrEmpty(_config.WebhookUrl))
+		if (!string.IsNullOrEmpty(Config.CurrentValue.WebhookUrl))
 		{
 			_webhookService = new WebhookService(Core.PluginPath);
 		}
 
-		_resetService = new ResetService(_config, _database, _playerManager, _webhookService);
+		_resetService = new ResetService(_database, _playerManager, _webhookService);
 
 		_playerManager.OnMissionCompleted += HandleMissionCompleted;
 
@@ -200,7 +202,7 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 		var eventType = typeof(T).Name;
 
 		// Check warmup restriction
-		if (!_config.AllowProgressDuringWarmup)
+		if (!Config.CurrentValue.AllowProgressDuringWarmup)
 		{
 			var gameRules = Core.EntitySystem.GetGameRules();
 			if (gameRules?.WarmupPeriod == true)
@@ -247,7 +249,7 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 			if (player?.IsValid != true || player.IsFakeClient)
 				continue;
 
-			if (_config.EventDebugLogs)
+			if (Config.CurrentValue.EventDebugLogs)
 			{
 				foreach (var (key, propValue) in properties)
 				{
@@ -300,13 +302,13 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 
 	private void RegisterCommands()
 	{
-		if (_config.MissionCommands.Count == 0)
+		if (Config.CurrentValue.MissionCommands.Count == 0)
 			return;
 
-		var primary = _config.MissionCommands[0];
+		var primary = Config.CurrentValue.MissionCommands[0];
 		Core.Command.RegisterCommand(primary, OnMissionCommand);
 
-		foreach (var alias in _config.MissionCommands.Skip(1))
+		foreach (var alias in Config.CurrentValue.MissionCommands.Skip(1))
 		{
 			Core.Command.RegisterCommandAlias(primary, alias);
 		}
@@ -406,9 +408,9 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 			.SetPlayerFrozen(false);
 
 		// player limit warning
-		if (_playerManager.ActivePlayerCount < _config.MinimumPlayers)
+		if (_playerManager.ActivePlayerCount < Config.CurrentValue.MinimumPlayers)
 		{
-			menuBuilder.AddOption(new TextMenuOption($"<font color='#FF6B6B'>⚠ {localizer["k4.missions.menu.playerlimit", _config.MinimumPlayers]}</font>"));
+			menuBuilder.AddOption(new TextMenuOption($"<font color='#FF6B6B'>⚠ {localizer["k4.missions.menu.playerlimit", Config.CurrentValue.MinimumPlayers]}</font>"));
 		}
 
 		// reset info at top
@@ -455,9 +457,9 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 			}
 
 			// locked VIP slots
-			if (!player.IsVip && _config.MissionAmountVip > _config.MissionAmountNormal)
+			if (!player.IsVip && Config.CurrentValue.MissionAmountVip > Config.CurrentValue.MissionAmountNormal)
 			{
-				for (var i = counter; i <= _config.MissionAmountVip; i++)
+				for (var i = counter; i <= Config.CurrentValue.MissionAmountVip; i++)
 				{
 					menuBuilder.AddOption(new TextMenuOption($"<font color='#666666'>🔒 {localizer["k4.missions.menu.mission", i]} - {localizer["k4.missions.menu.vip_locked"]}</font>"));
 				}
@@ -494,12 +496,12 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 
 	private string GetResetTimeInfo(MissionPlayer player, ILocalizer localizer)
 	{
-		if (_config.ResetMode == ResetMode.PerMap)
+		if (Config.CurrentValue.ResetMode == ResetMode.PerMap)
 		{
 			return localizer["k4.missions.menu.reset.map"].ToString();
 		}
 
-		if (_config.ResetMode is ResetMode.Instant)
+		if (Config.CurrentValue.ResetMode is ResetMode.Instant)
 		{
 			return localizer["k4.missions.menu.reset.instant"].ToString();
 		}
@@ -510,7 +512,7 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 
 		var (days, hours, minutes) = ResetService.GetTimeUntilExpiration(expiresAt.Value);
 
-		return _config.ResetMode switch
+		return Config.CurrentValue.ResetMode switch
 		{
 			ResetMode.Weekly or ResetMode.Monthly =>
 				localizer["k4.missions.menu.reset.days", days, hours, minutes].ToString(),
@@ -521,21 +523,21 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 	private void HandleMissionCompleted(MissionPlayer player, PlayerMission mission)
 	{
 		// Handle webhook
-		if (_webhookService != null && !string.IsNullOrEmpty(_config.WebhookUrl))
+		if (_webhookService != null && !string.IsNullOrEmpty(Config.CurrentValue.WebhookUrl))
 		{
 			var localizer = Core.Translation.GetPlayerLocalizer(player.Player);
 
 			Task.Run(async () =>
 			{
 				await _webhookService.SendMissionCompleteAsync(
-					_config.WebhookUrl,
+					Config.CurrentValue.WebhookUrl,
 					player,
 					mission,
 					key => localizer[key]);
 
 				if (player.AllMissionsCompleted)
 				{
-					await _webhookService.SendAllMissionsCompleteAsync(_config.WebhookUrl, player);
+					await _webhookService.SendAllMissionsCompleteAsync(Config.CurrentValue.WebhookUrl, player);
 				}
 			});
 		}
@@ -547,13 +549,13 @@ public sealed partial class Plugin(ISwiftlyCore core) : BasePlugin(core)
 	private bool CheckVipStatus(MissionPlayer player)
 	{
 		// Check permission flags
-		if (_config.VipFlags.Any(flag => Core.Permission.PlayerHasPermission(player.SteamId, flag)))
+		if (Config.CurrentValue.VipFlags.Any(flag => Core.Permission.PlayerHasPermission(player.SteamId, flag)))
 			return true;
 
 		// Check domain in name
 		var playerName = player.Player.Controller?.PlayerName ?? string.Empty;
-		if (!string.IsNullOrEmpty(_config.VipNameDomain) &&
-			playerName.Contains(_config.VipNameDomain, StringComparison.OrdinalIgnoreCase))
+		if (!string.IsNullOrEmpty(Config.CurrentValue.VipNameDomain) &&
+			playerName.Contains(Config.CurrentValue.VipNameDomain, StringComparison.OrdinalIgnoreCase))
 			return true;
 
 		return false;
